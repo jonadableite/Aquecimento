@@ -2,6 +2,7 @@ import axios from "axios";
 import express from "express";
 import { authMiddleware } from "../middlewares/auth.js";
 import Instance from "../models/Instance.js";
+import User from "../models/User.js"; // Certifique-se de importar o modelo User
 import WarmupStats from "../models/WarmupStats.js";
 
 const router = express.Router();
@@ -15,22 +16,6 @@ router.use(authMiddleware);
 router.post("/createInstance", async (req, res) => {
 	try {
 		const { instanceName, integration, number } = req.body;
-
-		// Verificar limite de instâncias antes de criar
-		const instanceCount = await Instance.countDocuments({ user: req.user._id });
-		const userPlan = req.user.plan;
-
-		const instanceLimits = {
-			free: 2,
-			pro: 5,
-			enterprise: Number.POSITIVE_INFINITY,
-		};
-
-		if (instanceCount >= instanceLimits[userPlan]) {
-			return res.status(403).json({
-				error: `Limite de instâncias excedido. Seu plano ${userPlan} permite ${instanceLimits[userPlan]} instâncias.`,
-			});
-		}
 
 		const evoResponse = await axios.post(
 			`${API_URL}/instance/create`,
@@ -62,7 +47,7 @@ router.post("/createInstance", async (req, res) => {
 		});
 
 		await WarmupStats.create({
-			instanceId: instanceData.instanceName,
+			instanceId: instanceData.instanceName, // Usando instanceName como identificador
 			user: req.user._id,
 			status: "paused",
 		});

@@ -40,11 +40,10 @@ instanceSchema.statics.createInstanceForUser = async function (
 
 	const instanceCount = await this.countDocuments({ user: userId });
 
-	// Limites de instâncias por plano
 	const instanceLimits = {
 		free: 2,
 		pro: 5,
-		enterprise: Number.POSITIVE_INFINITY, // Sem limite para plano enterprise
+		enterprise: Number.POSITIVE_INFINITY,
 	};
 
 	const limit = instanceLimits[user.plan] || 0;
