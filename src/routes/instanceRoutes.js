@@ -1,8 +1,9 @@
+// src/routes/instanceRoutes.js
 import axios from "axios";
 import express from "express";
 import { authMiddleware } from "../middlewares/auth.js";
 import Instance from "../models/Instance.js";
-import User from "../models/User.js"; // Certifique-se de importar o modelo User
+import User from "../models/User.js";
 import WarmupStats from "../models/WarmupStats.js";
 
 const router = express.Router();
@@ -15,14 +16,13 @@ router.use(authMiddleware);
 // Rota para criar uma nova instância
 router.post("/createInstance", async (req, res) => {
 	try {
-		const { instanceName, integration, number } = req.body;
+		const { instanceName } = req.body;
 
 		const evoResponse = await axios.post(
 			`${API_URL}/instance/create`,
 			{
 				instanceName,
-				integration: integration || "WHATSAPP-BAILEYS",
-				number: number || "",
+				integration: "WHATSAPP-BAILEYS",
 				qrcode: true,
 			},
 			{
@@ -40,14 +40,13 @@ router.post("/createInstance", async (req, res) => {
 		const instanceData = evoResponse.data.instance;
 
 		const newInstance = await Instance.createInstanceForUser(req.user._id, {
-			instanceName: instanceData.instanceName,
+			instanceName: instanceName,
 			integration: instanceData.integration,
-			number: instanceData.number,
 			connectionStatus: instanceData.status || "pending",
 		});
 
 		await WarmupStats.create({
-			instanceId: instanceData.instanceName, // Usando instanceName como identificador
+			instanceId: newInstance._id, // Usar o _id da instância recém-criada
 			user: req.user._id,
 			status: "paused",
 		});
@@ -64,7 +63,7 @@ router.post("/createInstance", async (req, res) => {
 });
 
 // Rota para listar todas as instâncias do usuário
-router.get("/instances", async (req, res) => {
+router.get("/", async (req, res) => {
 	try {
 		const instances = await Instance.find({ user: req.user._id });
 		const user = await User.findById(req.user._id);
