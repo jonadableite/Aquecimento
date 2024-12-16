@@ -4,6 +4,7 @@ export const getDashboardStats = async (req, res) => {
 	const userId = req.user.id;
 	try {
 		const stats = await WarmupStats.find({ user: userId });
+<<<<<<< HEAD
 
 		console.log(
 			"Dados do WarmupStats:",
@@ -12,6 +13,8 @@ export const getDashboardStats = async (req, res) => {
 				warmupTime: stat.warmupTime,
 			})),
 		);
+=======
+>>>>>>> 332b2cde7e79924537bab155a91c7bd7a7514190
 
 		const totalWarmups = stats.length;
 		const activeInstances = stats.filter(
