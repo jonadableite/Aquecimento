@@ -1,8 +1,17 @@
 import WarmupStats from "../models/WarmupStats.js";
 
 export const getDashboardStats = async (req, res) => {
+	const userId = req.user.id;
 	try {
-		const stats = await WarmupStats.find();
+		const stats = await WarmupStats.find({ user: userId });
+
+		console.log(
+			"Dados do WarmupStats:",
+			stats.map((stat) => ({
+				instanceId: stat.instanceId,
+				warmupTime: stat.warmupTime,
+			})),
+		);
 
 		const totalWarmups = stats.length;
 		const activeInstances = stats.filter(
@@ -82,6 +91,7 @@ export const getDashboardStats = async (req, res) => {
 			averageTime: averageTimeInHours.toFixed(2),
 			instanceProgress,
 			messageTypes,
+			instances: stats,
 		});
 	} catch (error) {
 		console.error("Erro ao buscar estatísticas do dashboard:", error.message);
