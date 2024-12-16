@@ -1,4 +1,3 @@
-// src/routes/instanceRoutes.js
 import axios from "axios";
 import express from "express";
 import { authMiddleware } from "../middlewares/auth.js";
@@ -12,6 +11,45 @@ const API_KEY = "429683C4C977415CAAFCCE10F7D57E11";
 
 // Aplicar middleware de autenticação em todas as rotas
 router.use(authMiddleware);
+
+// Função para buscar e atualizar o status das instâncias
+const fetchAndUpdateInstanceStatuses = async () => {
+	try {
+		const instances = await Instance.find();
+
+		for (const instance of instances) {
+			try {
+				const response = await axios.get(
+					`${API_URL}/instance/connectionState/${instance.instanceName}`,
+					{
+						headers: {
+							apikey: API_KEY,
+						},
+					},
+				);
+
+				if (response.status === 200 && response.data.instance) {
+					const currentStatus = response.data.instance.state;
+
+					if (instance.connectionStatus !== currentStatus) {
+						instance.connectionStatus = currentStatus;
+						await instance.save();
+						console.log(
+							`Status da instância ${instance.instanceName} atualizado para ${currentStatus}`,
+						);
+					}
+				}
+			} catch (error) {
+				console.error(
+					`Erro ao verificar status da instância ${instance.instanceName}:`,
+					error.message,
+				);
+			}
+		}
+	} catch (error) {
+		console.error("Erro ao atualizar status das instâncias:", error);
+	}
+};
 
 // Rota para criar uma nova instância
 router.post("/createInstance", async (req, res) => {
@@ -65,6 +103,8 @@ router.post("/createInstance", async (req, res) => {
 // Rota para listar todas as instâncias do usuário
 router.get("/", async (req, res) => {
 	try {
+		await fetchAndUpdateInstanceStatuses(); // Busca e atualiza o status antes de listar
+
 		const instances = await Instance.find({ user: req.user._id });
 		const user = await User.findById(req.user._id);
 
@@ -81,8 +121,58 @@ router.get("/", async (req, res) => {
 		const instanceLimit = instanceLimits[user.plan] || 0;
 		const remainingSlots = instanceLimit - instances.length;
 
+		// Buscar todas as instâncias da API da Evo
+		const evoResponse = await axios.get(`${API_URL}/instance/fetchInstances`, {
+			headers: {
+				apikey: API_KEY,
+			},
+		});
+
+		if (evoResponse.status !== 200 || !evoResponse.data) {
+			console.error(
+				"Erro ao buscar instâncias da API da Evo:",
+				evoResponse.data,
+			);
+			return res
+				.status(500)
+				.json({ error: "Erro ao buscar instâncias da API da Evo" });
+		}
+
+		const evoInstances = evoResponse.data;
+
+		// Mapear as instâncias do banco de dados com as da API da Evo
+		const instancesWithRemoteJid = await Promise.all(
+			instances.map(async (instance) => {
+				const evoInstance = evoInstances.find(
+					(evo) => evo.name === instance.instanceName,
+				);
+				if (evoInstance) {
+					// Atualizar a instância com os dados da API da Evo
+					instance.ownerJid = evoInstance.ownerJid;
+					instance.profilePicUrl = evoInstance.profilePicUrl;
+					instance.integration = evoInstance.integration;
+					instance.token = evoInstance.token;
+					instance.createdAt = evoInstance.createdAt;
+					instance.updatedAt = evoInstance.updatedAt;
+					await instance.save();
+
+					return {
+						...instance.toObject(),
+						ownerJid: evoInstance.ownerJid,
+						profileName: evoInstance.profileName,
+						profilePicUrl: evoInstance.profilePicUrl,
+						integration: evoInstance.integration,
+						token: evoInstance.token,
+						createdAt: evoInstance.createdAt,
+						updatedAt: evoInstance.updatedAt,
+					};
+				}
+				return instance.toObject();
+			}),
+		);
+
 		res.status(200).json({
-			instances,
+			instances: instancesWithRemoteJid,
 			currentPlan: user.plan,
 			instanceLimit,
 			remainingSlots,

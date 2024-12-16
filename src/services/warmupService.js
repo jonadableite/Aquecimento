@@ -1,5 +1,5 @@
 import axios from "axios";
-import WarmupStats from "../models/WarmupStats.js";
+import WarmupStatsModel from "../models/WarmupStats.js";
 
 const URL_API = "https://evo.whatlead.com.br";
 const API_KEY = "429683C4C977415CAAFCCE10F7D57E11";
@@ -7,25 +7,22 @@ const API_KEY = "429683C4C977415CAAFCCE10F7D57E11";
 class WarmupService {
 	constructor() {
 		this.activeInstances = new Map();
+		this.stop = false;
 	}
 
 	async startWarmup(config) {
+		this.stop = false;
 		for (const instance of config.phoneInstances) {
-			const stats = await WarmupStats.findOne({
-				instanceId: instance.instanceId,
-			});
-			if (stats && stats.status === "active") {
-				await this.startInstanceTimer(instance.instanceId);
-				this.startInstanceWarmup(instance, config);
-			}
+			await this.startInstanceTimer(instance.instanceId);
+			this.startInstanceWarmup(instance, config);
 		}
 	}
 
 	async startInstanceTimer(instanceId) {
-		let stats = await WarmupStats.findOne({ instanceId });
+		let stats = await WarmupStatsModel.findOne({ instanceId });
 
 		if (!stats) {
-			stats = new WarmupStats({ instanceId });
+			stats = new WarmupStatsModel({ instanceId });
 		}
 
 		stats.status = "active";
@@ -33,12 +30,17 @@ class WarmupService {
 		await stats.save();
 
 		const timer = setInterval(async () => {
-			const currentStats = await WarmupStats.findOne({ instanceId });
+			if (this.stop) {
+				clearInterval(timer);
+				return;
+			}
+
+			const currentStats = await WarmupStatsModel.findOne({ instanceId });
 			if (currentStats && currentStats.status === "active") {
-				const newWarmupTime = currentStats.warmupTime + 1;
+				const newWarmupTime = (currentStats.warmupTime || 0) + 1;
 				const progress = (newWarmupTime / (480 * 3600)) * 100;
 
-				await WarmupStats.updateOne(
+				await WarmupStatsModel.updateOne(
 					{ instanceId },
 					{
 						$set: {
@@ -55,13 +57,14 @@ class WarmupService {
 	}
 
 	async stopWarmup(instanceId) {
+		this.stop = true;
 		const timer = this.activeInstances.get(instanceId);
 		if (timer) {
 			clearInterval(timer);
 			this.activeInstances.delete(instanceId);
 		}
 
-		await WarmupStats.updateOne(
+		await WarmupStatsModel.updateOne(
 			{ instanceId },
 			{
 				$set: {
@@ -77,93 +80,135 @@ class WarmupService {
 			`Iniciando aquecimento para a instância ${instance.instanceId}`,
 		);
 
-		while (true) {
-			const stats = await WarmupStats.findOne({
+		while (!this.stop) {
+			const stats = await WarmupStatsModel.findOne({
 				instanceId: instance.instanceId,
 			});
-			if (!stats || stats.status !== "active") {
+			if (stats && stats.status !== "active") {
+				console.log(
+					`Aquecimento para a instância ${instance.instanceId} foi pausado.`,
+				);
 				break;
 			}
-
 			for (const toInstance of config.phoneInstances) {
-				if (instance.instanceId === toInstance.instanceId) continue;
+				if (this.stop || instance.instanceId === toInstance.instanceId)
+					continue;
 
-				const randomText = this.getRandomItem(config.contents.texts);
-				const randomImage = this.getRandomItem(config.contents.images);
-				const randomAudio = this.getRandomItem(config.contents.audios);
-				const randomSticker = this.getRandomItem(config.contents.stickers);
+				try {
+					// Enviar texto
+					const randomText = this.getRandomItem(config.contents.texts);
+					const textMessageId = await this.sendMessage(
+						instance.instanceId,
+						toInstance.phoneNumber,
+						randomText,
+						"text",
+					);
 
-				const textSentMessageId = await this.sendMessage(
-					instance.instanceId,
-					toInstance.phoneNumber,
-					randomText,
-				);
+					if (textMessageId) {
+						await this.delay(config.config.minDelay, config.config.maxDelay);
 
-				if (textSentMessageId) {
-					await this.delay(config.config.minDelay, config.config.maxDelay);
+						// Enviar reação
+						if (Math.random() < config.config.reactionChance) {
+							await this.sendReaction(
+								instance.instanceId,
+								toInstance.phoneNumber,
+								textMessageId,
+								config,
+							);
+						}
 
-					if (Math.random() < config.config.reactionChance) {
-						await this.sendReaction(
-							instance.instanceId,
-							toInstance.phoneNumber,
-							textSentMessageId,
-							config,
-						);
+						// Enviar imagem
+						if (
+							config.contents.images &&
+							config.contents.images.length > 0 &&
+							Math.random() < config.config.stickerChance
+						) {
+							const randomImage = this.getRandomItem(config.contents.images);
+							const base64Image = this.extractBase64(randomImage);
+							if (base64Image) {
+								await this.sendMessage(
+									instance.instanceId,
+									toInstance.phoneNumber,
+									{ type: "image", url: base64Image },
+									"image",
+								);
+							}
+						}
+
+						// Enviar áudio
+						if (
+							config.contents.audios &&
+							config.contents.audios.length > 0 &&
+							Math.random() < config.config.audioChance
+						) {
+							const randomAudio = this.getRandomItem(config.contents.audios);
+							const base64Audio = this.extractBase64(randomAudio);
+							if (base64Audio) {
+								await this.sendAudioMessage(
+									instance.instanceId,
+									toInstance.phoneNumber,
+									base64Audio,
+								);
+							}
+						}
+						// Enviar vídeo
+						if (
+							config.contents.videos &&
+							config.contents.videos.length > 0 &&
+							Math.random() < config.config.videoChance
+						) {
+							const randomVideo = this.getRandomItem(config.contents.videos);
+							const base64Video = this.extractBase64(randomVideo);
+							if (base64Video) {
+								await this.sendMessage(
+									instance.instanceId,
+									toInstance.phoneNumber,
+									{ type: "video", url: base64Video },
+									"video",
+								);
+							}
+						}
+						// Enviar sticker
+						if (
+							config.contents.stickers &&
+							config.contents.stickers.length > 0 &&
+							Math.random() < config.config.stickerChance
+						) {
+							const randomSticker = this.getRandomItem(
+								config.contents.stickers,
+							);
+							const base64Sticker = this.extractBase64(randomSticker);
+							if (base64Sticker) {
+								await this.sendStickerMessage(
+									instance.instanceId,
+									toInstance.phoneNumber,
+									base64Sticker,
+								);
+							}
+						}
 					}
 
-					if (Math.random() < config.config.imageChance) {
-						await this.sendMessage(
-							instance.instanceId,
-							toInstance.phoneNumber,
-							{
-								type: "image",
-								url: randomImage,
-							},
-						);
-					}
-
-					if (Math.random() < config.config.audioChance) {
-						await this.sendAudio(
-							instance.instanceId,
-							toInstance.phoneNumber,
-							randomAudio,
-						);
-					}
-
-					if (Math.random() < config.config.stickerChance) {
-						await this.sendSticker(
-							instance.instanceId,
-							toInstance.phoneNumber,
-							randomSticker,
-						);
-					}
+					await this.delay(5000, 30000);
+				} catch (error) {
+					console.error(`Erro no warmup de ${instance.instanceId}:`, error);
 				}
-
-				await this.delay(5000, 30000);
 			}
 		}
 	}
 
-	async sendMessage(instanceId, to, content) {
-		const instanceExists = await this.checkInstanceExists(instanceId);
-		if (!instanceExists) {
-			console.error(`Instância ${instanceId} não está disponível`);
-			return false;
-		}
-
+	async sendMessage(instanceId, to, content, messageType) {
 		try {
-			const isImage = typeof content !== "string" && content.type === "image";
+			const isMedia = typeof content === "object" && content.type !== "text";
 
-			const endpoint = isImage
+			const endpoint = isMedia
 				? `${URL_API}/message/sendMedia/${instanceId}`
 				: `${URL_API}/message/sendText/${instanceId}`;
 
-			const payload = isImage
+			const payload = isMedia
 				? {
 						number: to,
-						mediatype: "image",
+						mediatype: content.type,
 						media: content.url,
-						fileName: "image.jpg",
 						options: { delay: 5, linkPreview: false },
 					}
 				: {
@@ -181,57 +226,28 @@ class WarmupService {
 
 			const messageId = response.data?.key?.id;
 			console.log(
-				`Mensagem enviada para ${to} via ${instanceId}. ID: ${messageId}`,
+				`${messageType.toUpperCase()} enviado para ${to} via ${instanceId}. ID: ${messageId}`,
 			);
 
-			await WarmupStats.updateOne(
-				{ instanceId },
-				{
-					$inc: {
-						messagesSent: 1,
-						[`mediaStats.${isImage ? "image" : "text"}`]: 1,
-					},
-					$set: {
-						lastActive: new Date(),
-					},
-				},
-			);
-
-			if (Math.random() < 0.5) {
-				await WarmupStats.updateOne(
-					{ instanceId },
-					{
-						$inc: {
-							messagesReceived: 1,
-						},
-					},
-				);
-			}
-
-			return messageId || true;
+			await this.updateMediaStats(instanceId, messageType);
+			return messageId;
 		} catch (error) {
 			console.error(
-				`Erro ao enviar mensagem para ${to}:`,
+				`Erro ao enviar ${messageType} para ${to}:`,
 				error.response?.data || error.message,
 			);
 			return false;
 		}
 	}
-
-	async sendAudio(instanceId, to, audioUrl) {
+	async sendAudioMessage(instanceId, to, audioBase64) {
 		try {
-			const payload = {
-				number: to,
-				audio: audioUrl,
-				options: {
-					delay: 1200,
-					encoding: true,
-				},
-			};
-
 			const response = await axios.post(
 				`${URL_API}/message/sendWhatsAppAudio/${instanceId}`,
-				payload,
+				{
+					number: to,
+					audio: audioBase64,
+					encoding: true, // Adicionando a opção de encoding
+				},
 				{
 					headers: {
 						"Content-Type": "application/json",
@@ -239,26 +255,12 @@ class WarmupService {
 					},
 				},
 			);
-
 			const messageId = response.data?.key?.id;
 			console.log(
-				`Áudio enviado para ${to} via ${instanceId}. ID: ${messageId}`,
+				`AUDIO enviado para ${to} via ${instanceId}. ID: ${messageId}`,
 			);
-
-			await WarmupStats.updateOne(
-				{ instanceId },
-				{
-					$inc: {
-						messagesSent: 1,
-						"mediaStats.audio": 1,
-					},
-					$set: {
-						lastActive: new Date(),
-					},
-				},
-			);
-
-			return messageId || true;
+			await this.updateMediaStats(instanceId, "audio");
+			return messageId;
 		} catch (error) {
 			console.error(
 				`Erro ao enviar áudio para ${to}:`,
@@ -267,20 +269,14 @@ class WarmupService {
 			return false;
 		}
 	}
-
-	async sendSticker(instanceId, to, stickerUrl) {
+	async sendStickerMessage(instanceId, to, stickerBase64) {
 		try {
-			const payload = {
-				number: to,
-				sticker: stickerUrl,
-				options: {
-					delay: 1200,
-				},
-			};
-
 			const response = await axios.post(
 				`${URL_API}/message/sendSticker/${instanceId}`,
-				payload,
+				{
+					number: to,
+					sticker: stickerBase64,
+				},
 				{
 					headers: {
 						"Content-Type": "application/json",
@@ -288,9 +284,12 @@ class WarmupService {
 					},
 				},
 			);
-
-			console.log(`Sticker enviado para ${to} via ${instanceId}`);
-			return true;
+			const messageId = response.data?.key?.id;
+			console.log(
+				`STICKER enviado para ${to} via ${instanceId}. ID: ${messageId}`,
+			);
+			await this.updateMediaStats(instanceId, "sticker");
+			return messageId;
 		} catch (error) {
 			console.error(
 				`Erro ao enviar sticker para ${to}:`,
@@ -303,7 +302,6 @@ class WarmupService {
 	async sendReaction(instanceId, to, messageId, config) {
 		try {
 			const reaction = this.getRandomItem(config.contents.emojis);
-
 			const payload = {
 				key: {
 					remoteJid: to,
@@ -313,7 +311,7 @@ class WarmupService {
 				reaction: reaction,
 			};
 
-			const response = await axios.post(
+			await axios.post(
 				`${URL_API}/message/sendReaction/${instanceId}`,
 				payload,
 				{
@@ -335,24 +333,6 @@ class WarmupService {
 		}
 	}
 
-	async checkInstanceExists(instanceId) {
-		try {
-			const response = await axios.get(
-				`${URL_API}/instance/connect/${instanceId}`,
-				{
-					headers: {
-						"Content-Type": "application/json",
-						apikey: API_KEY,
-					},
-				},
-			);
-			return response.status === 200;
-		} catch (error) {
-			console.error(`Erro ao verificar instância ${instanceId}:`, error);
-			return false;
-		}
-	}
-
 	getRandomItem(items) {
 		return items[Math.floor(Math.random() * items.length)];
 	}
@@ -361,13 +341,31 @@ class WarmupService {
 		const delay = Math.floor(Math.random() * (max - min + 1)) + min;
 		return new Promise((resolve) => setTimeout(resolve, delay));
 	}
-
-	async getInstanceStats(instanceId) {
-		return WarmupStats.findOne({ instanceId });
+	async updateMediaStats(instanceId, mediaType) {
+		try {
+			const stats = await WarmupStatsModel.findOne({ instanceId });
+			if (stats) {
+				const mediaStats = stats.mediaStats || {};
+				mediaStats[mediaType] = (mediaStats[mediaType] || 0) + 1;
+				await WarmupStatsModel.updateOne(
+					{ instanceId },
+					{ $set: { mediaStats } },
+				);
+			}
+		} catch (error) {
+			console.error(
+				`Erro ao atualizar estatísticas de mídia para ${instanceId}:`,
+				error,
+			);
+		}
 	}
-
-	async getAllInstancesStats() {
-		return WarmupStats.find();
+	extractBase64(dataUrl) {
+		try {
+			return dataUrl.split(",")[1];
+		} catch (error) {
+			console.error("Erro ao extrair base64:", error);
+			return null;
+		}
 	}
 }
 
