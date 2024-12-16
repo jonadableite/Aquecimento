@@ -18,12 +18,17 @@ export const createUser = async (userData) => {
 	// Hash da senha
 	const hashedPassword = await bcrypt.hash(password, 10);
 
+	// Define a data de expiração do período de teste (7 dias a partir da data de criação)
+	const trialEndDate = new Date();
+	trialEndDate.setDate(trialEndDate.getDate() + 7);
+
 	// Cria o usuário
 	const user = new User({
 		name,
 		email,
 		password: hashedPassword,
 		plan,
+		trialEndDate,
 	});
 
 	return user.save();

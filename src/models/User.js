@@ -24,7 +24,7 @@ const userSchema = new mongoose.Schema({
 	},
 	plan: {
 		type: String,
-		enum: ["free", "pro", "enterprise"],
+		enum: ["free", "basic", "pro", "enterprise"],
 		default: "free",
 	},
 	status: {
@@ -34,6 +34,9 @@ const userSchema = new mongoose.Schema({
 	maxInstances: {
 		type: Number,
 		default: 2,
+	},
+	trialEndDate: {
+		type: Date,
 	},
 	createdAt: {
 		type: Date,

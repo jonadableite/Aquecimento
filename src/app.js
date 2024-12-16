@@ -8,6 +8,7 @@ import morgan from "morgan";
 import path from "path";
 import { fileURLToPath } from "url";
 import { authMiddleware } from "./middlewares/auth.js";
+import authRoutes from "./routes/authRoutes.js"; // Importe as rotas de autenticação
 import dashboardRoutes from "./routes/dashboardRoutes.js";
 import instanceRoutes from "./routes/instanceRoutes.js";
 import sessionRoutes from "./routes/sessionRoutes.js";
@@ -59,6 +60,7 @@ mongoose
 // Rotas públicas
 app.use("/sessions", sessionRoutes); // Rotas de sessão para login
 app.use("/users", userRoutes); // Rotas de usuário para registro (pública)
+app.use("/auth", authRoutes); // Rotas de autenticação (pública)
 
 // Middleware de autenticação para rotas protegidas
 app.use(authMiddleware);
