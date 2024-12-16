@@ -4,7 +4,11 @@ import Redis from "ioredis";
 import nodemailer from "nodemailer";
 import User from "../models/User.js";
 
-const redis = new Redis(process.env.REDIS_URL); // Configuração do Redis para armazenar códigos temporariamente
+const redis = new Redis({
+	host: "painel.whatlead.com.br",
+	port: 6379,
+	password: "91238983Jonadab",
+});
 
 export const forgotPasswordController = {
 	async sendResetCode(req, res) {
