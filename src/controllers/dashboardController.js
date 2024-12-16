@@ -1,8 +1,9 @@
 import WarmupStats from "../models/WarmupStats.js";
 
 export const getDashboardStats = async (req, res) => {
+	const userId = req.user.id;
 	try {
-		const stats = await WarmupStats.find();
+		const stats = await WarmupStats.find({ user: userId });
 
 		const totalWarmups = stats.length;
 		const activeInstances = stats.filter(
