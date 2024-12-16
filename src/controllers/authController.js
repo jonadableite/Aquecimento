@@ -1,14 +1,25 @@
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
+import dotenv from "dotenv";
 import Redis from "ioredis";
 import nodemailer from "nodemailer";
 import User from "../models/User.js";
 
+dotenv.config();
+
 const redis = new Redis({
-	host: "painel.whatlead.com.br",
-	port: 6379,
-	password: "91238983Jonadab",
+	host: process.env.REDIS_HOST || "painel.whatlead.com.br",
+	port: process.env.REDIS_PORT || 6379,
+	password: process.env.REDIS_PASSWORD || "91238983Jonadab",
 });
+
+const SMTP_SENDER_EMAIL =
+	process.env.SMTP_SENDER_EMAIL || "whatLead Warmup <contato@whatlead.com.br>";
+const SMTP_HOST = process.env.SMTP_HOST || "smtp.zoho.com";
+const SMTP_PORT = process.env.SMTP_PORT || 587;
+const SMTP_USERNAME = process.env.SMTP_USERNAME || "contato@whatlead.com.br";
+const SMTP_PASSWORD = process.env.SMTP_PASSWORD || "Brayan2802@";
+const SMTP_AUTH_DISABLED = process.env.SMTP_AUTH_DISABLED === "true" || false;
 
 export const forgotPasswordController = {
 	async sendResetCode(req, res) {
@@ -20,7 +31,7 @@ export const forgotPasswordController = {
 			if (!user) {
 				return res.status(404).json({
 					success: false,
-					message: "Usuário não encontrado",
+					message: "Usuário não encontrado com este email.",
 				});
 			}
 
@@ -32,16 +43,20 @@ export const forgotPasswordController = {
 
 			// Enviar email
 			const transporter = nodemailer.createTransport({
-				// Configurações do seu serviço de email
-				service: "gmail",
+				host: SMTP_HOST,
+				port: SMTP_PORT,
 				auth: {
-					user: process.env.EMAIL_USER,
-					pass: process.env.EMAIL_PASS,
+					user: SMTP_USERNAME,
+					pass: SMTP_PASSWORD,
+				},
+				tls: {
+					minVersion: "TLSv1.2",
+					requireTLS: true,
 				},
 			});
 
 			await transporter.sendMail({
-				from: '"Sua Plataforma" <noreply@suaplataforma.com>',
+				from: SMTP_SENDER_EMAIL,
 				to: email,
 				subject: "Código de Recuperação de Senha",
 				html: `
@@ -53,12 +68,14 @@ export const forgotPasswordController = {
 
 			res.status(200).json({
 				success: true,
-				message: "Código de recuperação enviado",
+				message: "Código de recuperação enviado para seu email.",
 			});
 		} catch (error) {
+			console.error("Erro ao enviar código de recuperação:", error);
 			res.status(500).json({
 				success: false,
-				message: "Erro ao processar recuperação de senha",
+				message:
+					"Erro ao processar recuperação de senha. Tente novamente mais tarde.",
 			});
 		}
 	},
@@ -72,18 +89,19 @@ export const forgotPasswordController = {
 			if (storedCode === code) {
 				res.status(200).json({
 					success: true,
-					message: "Código verificado com sucesso",
+					message: "Código verificado com sucesso.",
 				});
 			} else {
 				res.status(400).json({
 					success: false,
-					message: "Código inválido",
+					message: "Código de verificação inválido.",
 				});
 			}
 		} catch (error) {
+			console.error("Erro ao verificar código:", error);
 			res.status(500).json({
 				success: false,
-				message: "Erro ao verificar código",
+				message: "Erro ao verificar código. Tente novamente mais tarde.",
 			});
 		}
 	},
@@ -97,7 +115,7 @@ export const forgotPasswordController = {
 			if (storedCode !== code) {
 				return res.status(400).json({
 					success: false,
-					message: "Código de recuperação inválido",
+					message: "Código de recuperação inválido.",
 				});
 			}
 
@@ -106,7 +124,7 @@ export const forgotPasswordController = {
 			if (!user) {
 				return res.status(404).json({
 					success: false,
-					message: "Usuário não encontrado",
+					message: "Usuário não encontrado com este email.",
 				});
 			}
 
@@ -122,12 +140,13 @@ export const forgotPasswordController = {
 
 			res.status(200).json({
 				success: true,
-				message: "Senha redefinida com sucesso",
+				message: "Senha redefinida com sucesso.",
 			});
 		} catch (error) {
+			console.error("Erro ao redefinir senha:", error);
 			res.status(500).json({
 				success: false,
-				message: "Erro ao redefinir senha",
+				message: "Erro ao redefinir senha. Tente novamente mais tarde.",
 			});
 		}
 	},

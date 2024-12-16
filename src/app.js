@@ -1,5 +1,4 @@
 import cors from "cors";
-import dotenv from "dotenv";
 import express from "express";
 import fileUpload from "express-fileupload";
 import rateLimit from "express-rate-limit";
@@ -16,7 +15,7 @@ import userRoutes from "./routes/userRoutes.js";
 import warmupRoutes from "./routes/warmupRoutes.js";
 
 // Configurar dotenv
-dotenv.config();
+// dotenv.config(); // Remova a configuração do dotenv
 
 const app = express();
 
@@ -48,8 +47,10 @@ const __dirname = path.dirname(__filename);
 app.use(express.static(path.join(__dirname, "public")));
 
 // Conexão com o MongoDB
+const MONGODB_URI =
+	"mongodb+srv://Jondab:91238983Jb@whatlead.jgcmf.mongodb.net/?retryWrites=true&w=majority&appName=WhatLead";
 mongoose
-	.connect(process.env.MONGODB_URI)
+	.connect(MONGODB_URI)
 	.then(() => {
 		console.log("Conectado ao MongoDB");
 	})
@@ -70,7 +71,7 @@ app.use("/instances", instanceRoutes);
 app.use("/warmup", warmupRoutes);
 app.use("/dashboard", dashboardRoutes);
 
-const PORT = process.env.PORT || 3050;
+const PORT = 3050; // Defina a porta diretamente
 app.listen(PORT, () => {
 	console.log(`Servidor rodando na porta ${PORT}`);
 });
