@@ -81,6 +81,7 @@ class WarmupService {
 		);
 
 		while (!this.stop) {
+			// Buscar o status da instância a cada iteração
 			const stats = await WarmupStatsModel.findOne({
 				instanceId: instance.instanceId,
 			});
