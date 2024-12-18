@@ -5,7 +5,9 @@
 	"type": "module",
 	"scripts": {
 		"start": "node src/app.js",
-		"dev": "nodemon src/app.js"
+		"dev": "nodemon src/app.js",
+		"build": "esbuild src/app.js --bundle --platform=node --outfile=dist/app.js",
+		"start:prod": "node dist/app.js"
 	},
 	"dependencies": {
 		"axios": "^1.7.9",
@@ -27,6 +29,7 @@
 		"yup": "^1.5.0"
 	},
 	"devDependencies": {
+		"esbuild": "^0.24.0",
 		"nodemon": "^3.1.9"
 	}
 }
