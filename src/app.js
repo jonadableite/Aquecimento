@@ -1,27 +1,29 @@
 import cors from "cors";
+import dotenv from "dotenv";
 import express from "express";
 import fileUpload from "express-fileupload";
 import rateLimit from "express-rate-limit";
 import mongoose from "mongoose";
 import morgan from "morgan";
 import path from "path";
+import stripe from "stripe";
 import { fileURLToPath } from "url";
+import { handleWebhook } from "./controllers/stripeController.js";
 import { authMiddleware } from "./middlewares/auth.js";
-import authRoutes from "./routes/authRoutes.js"; // Importe as rotas de autenticação
+import authRoutes from "./routes/authRoutes.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
 import instanceRoutes from "./routes/instanceRoutes.js";
 import sessionRoutes from "./routes/sessionRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
 import warmupRoutes from "./routes/warmupRoutes.js";
 
-// Configurar dotenv
-// dotenv.config(); // Remova a configuração do dotenv
+dotenv.config();
 
 const app = express();
 
 // Configurações de CORS
 const corsOptions = {
-	origin: "*", // Em produção, especifique os domínios permitidos
+	origin: "*",
 	methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
 	allowedHeaders: ["Content-Type", "Authorization", "apikey"],
 	credentials: true,
@@ -30,16 +32,16 @@ app.use(cors(corsOptions));
 
 // Limitação de taxa de requisições
 const limiter = rateLimit({
-	windowMs: 15 * 60 * 1000, // 15 minutos
-	max: 1000, // Limite de 1000 requisições por IP
+	windowMs: 15 * 60 * 1000,
+	max: 1000,
 });
 app.use(limiter);
 
 // Middlewares
-app.use(morgan("combined")); // Logs de requisições
+app.use(morgan("combined"));
 app.use(express.json({ limit: "800mb" }));
 app.use(express.urlencoded({ limit: "800mb", extended: true }));
-app.use(fileUpload()); // Use o middleware aqui
+app.use(fileUpload());
 
 // Servir arquivos estáticos
 const __filename = fileURLToPath(import.meta.url);
@@ -47,8 +49,7 @@ const __dirname = path.dirname(__filename);
 app.use(express.static(path.join(__dirname, "public")));
 
 // Conexão com o MongoDB
-const MONGODB_URI =
-	"mongodb+srv://Jondab:91238983Jb@whatlead.jgcmf.mongodb.net/?retryWrites=true&w=majority&appName=WhatLead";
+const MONGODB_URI = process.env.MONGODB_URI;
 mongoose
 	.connect(MONGODB_URI)
 	.then(() => {
@@ -58,10 +59,17 @@ mongoose
 		console.error("Erro ao conectar ao MongoDB:", error);
 	});
 
+// Configurar o Stripe
+const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+const stripeInstance = stripe(stripeSecretKey);
+
 // Rotas públicas
-app.use("/sessions", sessionRoutes); // Rotas de sessão para login
-app.use("/users", userRoutes); // Rotas de usuário para registro (pública)
-app.use("/auth", authRoutes); // Rotas de autenticação (pública)
+app.use("/sessions", sessionRoutes);
+app.use("/users", userRoutes);
+app.use("/auth", authRoutes);
+
+// Rota para receber os webhooks do Stripe (sem autenticação)
+app.post("/webhook", express.raw({ type: "application/json" }), handleWebhook);
 
 // Middleware de autenticação para rotas protegidas
 app.use(authMiddleware);
@@ -71,7 +79,9 @@ app.use("/instances", instanceRoutes);
 app.use("/warmup", warmupRoutes);
 app.use("/dashboard", dashboardRoutes);
 
-const PORT = 3050; // Defina a porta diretamente
+const PORT = process.env.PORT || 3050;
 app.listen(PORT, () => {
 	console.log(`Servidor rodando na porta ${PORT}`);
 });
+
+export { stripeInstance };

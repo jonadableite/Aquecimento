@@ -17,12 +17,20 @@ class UserController {
 		try {
 			await schema.validate(req.body, { abortEarly: false });
 
-			const user = await userService.createUser(req.body);
+			const { user, token } = await userService.createUser(req.body);
 
 			return res.status(201).json({
-				id: user._id,
-				name: user.name,
-				email: user.email,
+				token,
+				user: {
+					id: user._id,
+					name: user.name,
+					email: user.email,
+					plan: user.plan,
+					status: user.status,
+					maxInstances: user.maxInstances,
+					trialEndDate: user.trialEndDate,
+					stripeCustomerId: user.stripeCustomerId,
+				},
 			});
 		} catch (error) {
 			if (error instanceof Yup.ValidationError) {

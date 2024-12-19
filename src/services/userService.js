@@ -1,5 +1,7 @@
 import bcrypt from "bcryptjs";
+import { stripeInstance } from "../app.js";
 import User from "../models/User.js";
+import { generateToken } from "./sessionService.js";
 
 /**
  * Cria um novo usuário.
@@ -31,7 +33,25 @@ export const createUser = async (userData) => {
 		trialEndDate,
 	});
 
-	return user.save();
+	// Salva o usuário no banco de dados
+	await user.save();
+
+	// Cria o cliente no Stripe
+	const customer = await stripeInstance.customers.create({
+		email,
+		name,
+	});
+
+	// Atualiza o usuário com o ID do cliente do Stripe
+	user.stripeCustomerId = customer.id;
+	await user.save();
+
+	const token = generateToken(user);
+
+	return {
+		user,
+		token,
+	};
 };
 
 /**

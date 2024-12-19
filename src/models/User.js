@@ -38,6 +38,15 @@ const userSchema = new mongoose.Schema({
 	trialEndDate: {
 		type: Date,
 	},
+	stripeCustomerId: {
+		type: String,
+	},
+	stripeSubscriptionId: {
+		type: String,
+	},
+	stripeSubscriptionStatus: {
+		type: String,
+	},
 	createdAt: {
 		type: Date,
 		default: Date.now,

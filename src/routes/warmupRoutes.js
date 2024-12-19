@@ -1,3 +1,4 @@
+// src/routes/warmupRoutes.js
 import express from "express";
 import { authMiddleware } from "../middlewares/auth.js";
 import WarmupStats from "../models/WarmupStats.js";
