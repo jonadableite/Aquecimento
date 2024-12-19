@@ -1,6 +1,8 @@
+// src/services/userService.js
 import bcrypt from "bcryptjs";
 import { stripeInstance } from "../app.js";
 import User from "../models/User.js";
+import WarmupStats from "../models/WarmupStats.js";
 import { generateToken } from "./sessionService.js";
 
 /**
@@ -45,6 +47,9 @@ export const createUser = async (userData) => {
 	// Atualiza o usuário com o ID do cliente do Stripe
 	user.stripeCustomerId = customer.id;
 	await user.save();
+
+	// Cria o WarmupStats para o usuário
+	await WarmupStats.create({ userId: user._id });
 
 	const token = generateToken(user);
 

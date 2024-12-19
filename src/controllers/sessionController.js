@@ -1,4 +1,6 @@
+// src/controllers/sessionController.js
 import * as Yup from "yup";
+import { stripeInstance } from "../app.js";
 import * as sessionService from "../services/sessionService.js";
 
 class SessionController {
@@ -45,6 +47,22 @@ class SessionController {
 			}
 			console.error("Erro ao autenticar usuário:", error);
 			return res.status(500).json({ error: "Erro ao autenticar usuário" });
+		}
+	}
+
+	async getSessionStatus(req, res) {
+		const { session_id } = req.query;
+
+		try {
+			const session =
+				await stripeInstance.checkout.sessions.retrieve(session_id);
+			res.status(200).json({
+				status: session.status,
+				customer_email: session.customer_details.email,
+			});
+		} catch (error) {
+			console.error("Erro ao obter status da sessão:", error);
+			res.status(500).json({ error: "Erro ao obter status da sessão" });
 		}
 	}
 }

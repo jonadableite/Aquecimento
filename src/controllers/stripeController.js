@@ -116,17 +116,49 @@ export const createCheckoutSession = async (req, res) => {
 					quantity: 1,
 				},
 			],
-			payment_method_types: ["card"],
-			ui_mode: "embedded",
-			return_url: `${returnUrl}?session_id={CHECKOUT_SESSION_ID}`,
+			success_url: `${returnUrl}?session_id={CHECKOUT_SESSION_ID}`,
+			cancel_url: "http://localhost:5173/checkout",
 		});
 
 		res.status(200).json({
-			clientSecret: session.client_secret,
+			success: true,
+			message: "Sessão de checkout criada com sucesso",
+			url: session.url, // Retorna a URL de checkout
 		});
 	} catch (error) {
 		console.error("Erro ao criar sessão de checkout:", error);
-		res.status(500).json({ error: error.message });
+		res.status(500).json({ error: "Erro ao criar sessão de checkout" });
+	}
+};
+
+export const updateSubscriptionStatus = async (session) => {
+	try {
+		const customerId = session.customer;
+		const subscriptionId = session.subscription;
+		const subscription =
+			await stripeInstance.subscriptions.retrieve(subscriptionId);
+		const priceId = subscription.items.data[0].price.id;
+		const user = await User.findOne({ stripeCustomerId: customerId });
+
+		if (!user) {
+			console.error("Usuário não encontrado");
+			return;
+		}
+
+		let plan = "free";
+		if (priceId === "price_1QXZiFP7kXKQS2sw2G8Io0Jx") {
+			plan = "enterprise";
+		} else if (priceId === "price_1QXZiFP7kXKQS2sw70Kj7e2j") {
+			plan = "pro";
+		} else if (priceId === "price_1QXZiFP7kXKQS2sw16V14774") {
+			plan = "basic";
+		}
+
+		user.plan = plan;
+		await user.save();
+		console.log(`Plano do usuário ${user.email} atualizado para ${plan}`);
+	} catch (error) {
+		console.error("Erro ao atualizar o plano do usuário:", error);
 	}
 };
 
