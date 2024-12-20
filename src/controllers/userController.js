@@ -1,119 +1,117 @@
-// src/controllers/userController.js
-import * as Yup from "yup";
-import * as userService from "../services/userService.js";
-import logger from "../utils/logger.js";
+import { PrismaClient } from "@prisma/client"; // Importação correta
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
 
-class UserController {
-	async store(req, res) {
-		const schema = Yup.object().shape({
-			name: Yup.string().required("Nome é obrigatório"),
-			email: Yup.string()
-				.email("E-mail inválido")
-				.required("E-mail é obrigatório"),
-			password: Yup.string()
-				.min(6, "A senha deve ter pelo menos 6 caracteres")
-				.required("Senha é obrigatória"),
+const prisma = new PrismaClient();
+
+export const register = async (req, res) => {
+	try {
+		const { name, email, password } = req.body;
+
+		// Verificar se o usuário já existe
+		const userExists = await prisma.user.findUnique({ where: { email } });
+		if (userExists) {
+			return res.status(400).json({ error: "Usuário já cadastrado" });
+		}
+
+		// Criptografar a senha
+		const salt = await bcrypt.genSalt(10);
+		const hashedPassword = await bcrypt.hash(password, salt);
+
+		// Criar o usuário no banco de dados
+		const user = await prisma.user.create({
+			data: {
+				name,
+				email,
+				password: hashedPassword,
+			},
 		});
 
-		try {
-			await schema.validate(req.body, { abortEarly: false });
-
-			const { user, token } = await userService.createUser(req.body);
-
-			return res.status(201).json({
-				token,
-				user: {
-					id: user._id,
-					name: user.name,
-					email: user.email,
-					plan: user.plan,
-					status: user.status,
-					maxInstances: user.maxInstances,
-					trialEndDate: user.trialEndDate,
-					stripeCustomerId: user.stripeCustomerId,
-				},
-			});
-		} catch (error) {
-			if (error instanceof Yup.ValidationError) {
-				return res.status(400).json({
-					message: "Erro de validação",
-					errors: error.errors,
-				});
-			}
-
-			console.error("Erro detalhado:", error);
-			logger.error("Erro ao criar usuário:", error);
-			return res.status(500).json({
-				message: "Erro interno do servidor",
-				error: error.message,
-			});
-		}
-	}
-
-	async index(req, res) {
-		try {
-			const users = await userService.listUsers();
-			return res.json(users);
-		} catch (error) {
-			logger.error("Erro ao listar usuários:", error);
-			return res.status(500).json({ error: "Erro ao listar usuários" });
-		}
-	}
-
-	async show(req, res) {
-		try {
-			const { id } = req.params;
-			const user = await userService.getUser(id);
-			return res.json(user);
-		} catch (error) {
-			logger.error("Erro ao exibir usuário:", error);
-			return res.status(500).json({ error: "Erro ao exibir usuário" });
-		}
-	}
-
-	async delete(req, res) {
-		try {
-			const { id } = req.params;
-			await userService.deleteUser(id);
-			return res.status(204).send();
-		} catch (error) {
-			logger.error("Erro ao excluir usuário:", error);
-			return res.status(500).json({ error: "Erro ao excluir usuário" });
-		}
-	}
-
-	async update(req, res) {
-		const schema = Yup.object().shape({
-			name: Yup.string(),
-			email: Yup.string().email(),
-			oldPassword: Yup.string().when("password", (password, field) =>
-				password ? field.required() : field,
-			),
-			password: Yup.string().min(6),
-			confirmPassword: Yup.string().when("password", (password, field) =>
-				password ? field.required().oneOf([Yup.ref("password")]) : field,
-			),
-			status: Yup.boolean(),
-			plan: Yup.string().oneOf(["free", "pro", "enterprise"]),
-			maxInstances: Yup.number(),
+		// Gerar o token JWT
+		const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, {
+			expiresIn: "1d",
 		});
 
-		try {
-			await schema.validate(req.body, { abortEarly: false });
-
-			const { id } = req.params;
-			const response = await userService.updateUser(id, req.body);
-
-			return res.json(response);
-		} catch (error) {
-			if (error instanceof Yup.ValidationError) {
-				return res.status(400).json({ errors: error.errors });
-			}
-
-			logger.error("Erro ao atualizar usuário:", error);
-			return res.status(500).json({ error: "Erro ao atualizar usuário" });
-		}
+		res.status(201).json({
+			success: true,
+			message: "Usuário criado com sucesso",
+			token,
+		});
+	} catch (error) {
+		console.error("Erro ao criar usuário:", error);
+		res.status(500).json({ error: "Erro ao criar usuário" });
 	}
-}
+};
 
-export default new UserController();
+export const login = async (req, res) => {
+	try {
+		const { email, password } = req.body;
+
+		// Verificar se o usuário existe
+		const user = await prisma.user.findUnique({ where: { email } });
+		if (!user) {
+			return res.status(400).json({ error: "Usuário não encontrado" });
+		}
+
+		// Verificar a senha
+		const isMatch = await bcrypt.compare(password, user.password);
+		if (!isMatch) {
+			return res.status(400).json({ error: "Senha inválida" });
+		}
+
+		// Gerar o token JWT
+		const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, {
+			expiresIn: "1d",
+		});
+
+		res.status(200).json({
+			success: true,
+			message: "Login realizado com sucesso",
+			token,
+		});
+	} catch (error) {
+		console.error("Erro ao fazer login:", error);
+		res.status(500).json({ error: "Erro ao fazer login" });
+	}
+};
+
+export const getMe = async (req, res) => {
+	try {
+		const user = await prisma.user.findUnique({
+			where: { id: req.user.id },
+		});
+		if (!user) {
+			return res.status(404).json({ error: "Usuário não encontrado" });
+		}
+		res.status(200).json({ success: true, user });
+	} catch (error) {
+		console.error("Erro ao obter usuário:", error);
+		res.status(500).json({ error: "Erro ao obter usuário" });
+	}
+};
+
+export const updateUser = async (req, res) => {
+	try {
+		const { name, email } = req.body;
+		const user = await prisma.user.update({
+			where: { id: req.user.id },
+			data: { name, email },
+		});
+		res.status(200).json({ success: true, user });
+	} catch (error) {
+		console.error("Erro ao atualizar usuário:", error);
+		res.status(500).json({ error: "Erro ao atualizar usuário" });
+	}
+};
+
+export const deleteUser = async (req, res) => {
+	try {
+		await prisma.user.delete({ where: { id: req.user.id } });
+		res.status(200).json({ success: true, message: "Usuário excluído" });
+	} catch (error) {
+		console.error("Erro ao excluir usuário:", error);
+		res.status(500).json({ error: "Erro ao excluir usuário" });
+	}
+};
+
+export default { register, login, getMe, updateUser, deleteUser };

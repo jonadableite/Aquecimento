@@ -1,9 +1,9 @@
+import { PrismaClient } from "@prisma/client"; // Importação do Prisma Client
 import cors from "cors";
 import dotenv from "dotenv";
 import express from "express";
 import fileUpload from "express-fileupload";
 import rateLimit from "express-rate-limit";
-import mongoose from "mongoose";
 import morgan from "morgan";
 import path from "path";
 import stripe from "stripe";
@@ -48,16 +48,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 app.use(express.static(path.join(__dirname, "public")));
 
-// Conexão com o MongoDB
-const MONGODB_URI = process.env.MONGODB_URI;
-mongoose
-	.connect(MONGODB_URI)
-	.then(() => {
-		console.log("Conectado ao MongoDB");
-	})
-	.catch((error) => {
-		console.error("Erro ao conectar ao MongoDB:", error);
-	});
+// Inicialização do Prisma Client
+const prisma = new PrismaClient();
 
 // Configurar o Stripe
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
@@ -71,17 +63,14 @@ app.use("/auth", authRoutes);
 // Rota para receber os webhooks do Stripe (sem autenticação)
 app.post("/webhook", express.raw({ type: "application/json" }), handleWebhook);
 
-// Middleware de autenticação para rotas protegidas
-app.use(authMiddleware);
-
-// Rotas protegidas
-app.use("/instances", instanceRoutes);
-app.use("/warmup", warmupRoutes);
-app.use("/dashboard", dashboardRoutes);
+// Rotas protegidas (o middleware de autenticação será aplicado individualmente em cada rota)
+app.use("/instances", authMiddleware, instanceRoutes);
+app.use("/warmup", authMiddleware, warmupRoutes);
+app.use("/dashboard", authMiddleware, dashboardRoutes);
 
 const PORT = process.env.PORT || 3050;
 app.listen(PORT, () => {
 	console.log(`Servidor rodando na porta ${PORT}`);
 });
 
-export { stripeInstance };
+export { prisma, stripeInstance };

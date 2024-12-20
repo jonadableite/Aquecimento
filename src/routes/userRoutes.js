@@ -1,27 +1,38 @@
 import express from "express";
 import {
-	createCheckoutSession,
+	createCheckoutSessionController,
+	createCustomer,
 	createSubscription,
 	manageSubscription,
 } from "../controllers/stripeController.js";
-import UserController from "../controllers/userController.js";
-import { authMiddleware } from "../middlewares/auth.js";
+import {
+	deleteUser,
+	getMe,
+	login,
+	register,
+	updateUser,
+} from "../controllers/userController.js";
+import { authMiddleware as protect } from "../middlewares/auth.js";
 
 const router = express.Router();
 
-// Rota para criar um novo usuário (pública)
-router.post("/", UserController.store);
+// Rotas de usuário (sem autenticação)
+router.post("/register", register);
+router.post("/login", login);
 
-// Middleware de autenticação para as rotas do Stripe
-router.use(authMiddleware);
+// Rotas de usuário (com autenticação)
+router.get("/me", protect, getMe);
+router.put("/update", protect, updateUser);
+router.delete("/delete", protect, deleteUser);
 
-// Rota para criar uma assinatura no Stripe
-router.post("/create-subscription", createSubscription);
-
-// Rota para gerenciar a assinatura do cliente
-router.get("/manage-subscription", manageSubscription);
-
-// Rota para criar a sessão de checkout do Stripe
-router.post("/create-checkout-session", createCheckoutSession);
+// Rotas do Stripe (com autenticação)
+router.post("/create-customer", protect, createCustomer);
+router.post("/create-subscription", protect, createSubscription);
+router.post("/manage-subscription", protect, manageSubscription);
+router.post(
+	"/create-checkout-session",
+	protect,
+	createCheckoutSessionController,
+);
 
 export default router;

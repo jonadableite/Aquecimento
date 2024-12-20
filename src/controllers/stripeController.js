@@ -1,12 +1,28 @@
-import { stripeInstance } from "../app.js";
-import User from "../models/User.js";
+import { PrismaClient } from "@prisma/client"; // Importação correta
+import Redis from "ioredis";
+import { config } from "../config/index.js";
+import {
+	createCheckoutSession,
+	createStripeCustomer,
+	handleProcessWebhookCheckout,
+	handleProcessWebhookUpdatedSubscription,
+	stripeInstance,
+} from "../stripe/index.js";
+
+const prisma = new PrismaClient();
+
+const redis = new Redis({
+	host: process.env.REDIS_HOST || "painel.whatlead.com.br",
+	port: process.env.REDIS_PORT || 6379,
+	password: process.env.REDIS_PASSWORD || "91238983Jonadab",
+});
 
 export const createCustomer = async (req, res) => {
 	try {
 		const { email, name } = req.body;
 
 		// Criar cliente no Stripe
-		const customer = await stripeInstance.customers.create({
+		const customer = await createStripeCustomer({
 			email,
 			name,
 		});
@@ -25,7 +41,9 @@ export const createCustomer = async (req, res) => {
 export const createSubscription = async (req, res) => {
 	try {
 		const { priceId } = req.body;
-		const user = await User.findById(req.user._id);
+		const user = await prisma.user.findUnique({
+			where: { id: req.user.id },
+		});
 
 		if (!user.stripeCustomerId) {
 			return res
@@ -45,15 +63,9 @@ export const createSubscription = async (req, res) => {
 		});
 
 		// Atualizar o usuário com o ID da assinatura do Stripe
-		await User.findByIdAndUpdate(req.user._id, {
-			stripeSubscriptionId: subscription.id,
-			plan: priceId.includes("basic")
-				? "basic"
-				: priceId.includes("pro")
-					? "pro"
-					: priceId.includes("enterprise")
-						? "enterprise"
-						: "free",
+		await prisma.user.update({
+			where: { id: req.user.id },
+			data: { stripeSubscriptionId: subscription.id },
 		});
 
 		res.status(201).json({
@@ -70,7 +82,9 @@ export const createSubscription = async (req, res) => {
 
 export const manageSubscription = async (req, res) => {
 	try {
-		const user = await User.findById(req.user._id);
+		const user = await prisma.user.findUnique({
+			where: { id: req.user.id },
+		});
 
 		if (!user.stripeCustomerId) {
 			return res
@@ -96,34 +110,28 @@ export const manageSubscription = async (req, res) => {
 	}
 };
 
-export const createCheckoutSession = async (req, res) => {
+export const createCheckoutSessionController = async (req, res) => {
 	try {
 		const { priceId, returnUrl } = req.body;
-		const user = await User.findById(req.user._id);
+		const user = await prisma.user.findUnique({
+			where: { id: req.user.id },
+		});
 
-		if (!user.stripeCustomerId) {
-			return res
-				.status(400)
-				.json({ error: "Cliente não encontrado no Stripe" });
+		if (!user) {
+			return res.status(400).json({ error: "Usuário não encontrado" });
 		}
 
-		const session = await stripeInstance.checkout.sessions.create({
-			customer: user.stripeCustomerId,
-			mode: "subscription",
-			line_items: [
-				{
-					price: priceId,
-					quantity: 1,
-				},
-			],
-			success_url: `${returnUrl}?session_id={CHECKOUT_SESSION_ID}`,
-			cancel_url: "http://localhost:5173/checkout",
-		});
+		const session = await createCheckoutSession(
+			user.id,
+			user.email,
+			priceId,
+			returnUrl,
+		);
 
 		res.status(200).json({
 			success: true,
 			message: "Sessão de checkout criada com sucesso",
-			url: session.url, // Retorna a URL de checkout
+			url: session.url,
 		});
 	} catch (error) {
 		console.error("Erro ao criar sessão de checkout:", error);
@@ -131,40 +139,9 @@ export const createCheckoutSession = async (req, res) => {
 	}
 };
 
-export const updateSubscriptionStatus = async (session) => {
-	try {
-		const customerId = session.customer;
-		const subscriptionId = session.subscription;
-		const subscription =
-			await stripeInstance.subscriptions.retrieve(subscriptionId);
-		const priceId = subscription.items.data[0].price.id;
-		const user = await User.findOne({ stripeCustomerId: customerId });
-
-		if (!user) {
-			console.error("Usuário não encontrado");
-			return;
-		}
-
-		let plan = "free";
-		if (priceId === "price_1QXZiFP7kXKQS2sw2G8Io0Jx") {
-			plan = "enterprise";
-		} else if (priceId === "price_1QXZiFP7kXKQS2sw70Kj7e2j") {
-			plan = "pro";
-		} else if (priceId === "price_1QXZiFP7kXKQS2sw16V14774") {
-			plan = "basic";
-		}
-
-		user.plan = plan;
-		await user.save();
-		console.log(`Plano do usuário ${user.email} atualizado para ${plan}`);
-	} catch (error) {
-		console.error("Erro ao atualizar o plano do usuário:", error);
-	}
-};
-
 export const handleWebhook = async (req, res) => {
 	const sig = req.headers["stripe-signature"];
-	const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+	const webhookSecret = config.stripe.webhookSecret;
 
 	let event;
 
@@ -181,29 +158,26 @@ export const handleWebhook = async (req, res) => {
 
 	// Handle the event
 	switch (event.type) {
+		case "checkout.session.completed":
+			try {
+				await handleProcessWebhookCheckout(event);
+			} catch (error) {
+				console.error("Erro ao processar webhook de checkout:", error);
+			}
+			break;
 		case "customer.subscription.updated":
 		case "customer.subscription.deleted":
-			const subscription = event.data.object;
-			const customerId = subscription.customer;
-			const status = subscription.status;
-			const plan = subscription.items.data[0].price.id;
-
+			const eventId = event.id;
 			try {
-				const user = await User.findOne({ stripeCustomerId: customerId });
-				if (user) {
-					user.plan = plan.includes("basic")
-						? "basic"
-						: plan.includes("pro")
-							? "pro"
-							: plan.includes("enterprise")
-								? "enterprise"
-								: "free";
-					user.stripeSubscriptionStatus = status;
-					await user.save();
-					console.log(
-						`Assinatura do cliente ${customerId} atualizada para ${status}`,
-					);
+				// Verificar se o evento já foi processado
+				const processedEvent = await redis.get(`webhook_event:${eventId}`);
+				if (processedEvent) {
+					console.log(`Evento duplicado detectado: ${eventId}`);
+					return res.status(200).json({ received: true });
 				}
+				await handleProcessWebhookUpdatedSubscription(event);
+				// Registrar o evento como processado
+				await redis.set(`webhook_event:${eventId}`, "true", "EX", 60 * 60 * 24); // Expira em 24 horas
 			} catch (error) {
 				console.error(
 					"Erro ao atualizar assinatura do usuário no banco de dados:",

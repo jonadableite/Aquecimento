@@ -1,6 +1,7 @@
-// src/middlewares/auth.js
+import { PrismaClient } from "@prisma/client";
 import jwt from "jsonwebtoken";
-import User from "../models/User.js";
+
+const prisma = new PrismaClient();
 
 export const authMiddleware = async (req, res, next) => {
 	const authHeader = req.headers.authorization;
@@ -23,7 +24,9 @@ export const authMiddleware = async (req, res, next) => {
 
 	try {
 		const decoded = jwt.verify(token, process.env.JWT_SECRET);
-		const user = await User.findById(decoded.userId);
+		const user = await prisma.user.findUnique({
+			where: { id: decoded.userId },
+		});
 
 		if (!user) {
 			return res.status(401).json({ error: "Usuário não encontrado" });
