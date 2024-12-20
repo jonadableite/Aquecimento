@@ -2,9 +2,6 @@
 import axios from "axios";
 import express from "express";
 import { authMiddleware } from "../middlewares/auth.js";
-import Instance from "../models/Instance.js";
-import User from "../models/User.js";
-import WarmupStats from "../models/WarmupStats.js";
 
 const router = express.Router();
 const API_URL = "https://evo.whatlead.com.br";

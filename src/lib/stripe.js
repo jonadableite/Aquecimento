@@ -40,12 +40,11 @@ export const createCheckoutSession = async (
 			mode: "subscription",
 			client_reference_id: userId,
 			customer: customer.id,
-			success_url: `${returnUrl}?session_id={CHECKOUT_SESSION_ID}`,
-			cancel_url: `${returnUrl}/checkout`,
+			success_url: `${process.env.FRONTEND_URL}/return?session_id={CHECKOUT_SESSION_ID}`,
+			cancel_url: `${process.env.FRONTEND_URL}/checkout`,
 			line_items: [
 				{
 					price: priceId,
-					quantity: 1,
 				},
 			],
 		});

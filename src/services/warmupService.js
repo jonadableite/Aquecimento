@@ -1,6 +1,5 @@
 // src/services/warmupService.js
 import axios from "axios";
-import WarmupStatsModel from "../models/WarmupStats.js";
 
 const URL_API = "https://evo.whatlead.com.br";
 const API_KEY = "429683C4C977415CAAFCCE10F7D57E11";

@@ -1,7 +1,6 @@
 // src/routes/warmupRoutes.js
 import express from "express";
 import { authMiddleware } from "../middlewares/auth.js";
-import WarmupStats from "../models/WarmupStats.js";
 import warmupService from "../services/warmupService.js";
 
 const router = express.Router();

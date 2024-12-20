@@ -1,9 +1,13 @@
-import WarmupStats from "../models/WarmupStats.js";
+import { PrismaClient } from "@prisma/client";
+
+const prisma = new PrismaClient();
 
 export const getDashboardStats = async (req, res) => {
 	const userId = req.user.id;
 	try {
-		const stats = await WarmupStats.find({ user: userId });
+		const stats = await prisma.warmupStats.findMany({
+			where: { userId: userId },
+		});
 
 		console.log(
 			"Dados do WarmupStats:",

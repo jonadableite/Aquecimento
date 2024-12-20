@@ -32,11 +32,14 @@ export const authMiddleware = async (req, res, next) => {
 			return res.status(401).json({ error: "Usuário não encontrado" });
 		}
 
-		if (user.plan === "free" && new Date() > user.trialEndDate) {
-			return res.status(403).json({
-				error:
-					"Seu período de teste expirou. Por favor, escolha um plano para continuar.",
-			});
+		// Verificar se a rota é /users/create-checkout-session
+		if (req.originalUrl !== "/users/create-checkout-session") {
+			if (user.plan === "free" && new Date() > user.trialEndDate) {
+				return res.status(403).json({
+					error:
+						"Seu período de teste expirou. Por favor, escolha um plano para continuar.",
+				});
+			}
 		}
 
 		req.user = user;

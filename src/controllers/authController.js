@@ -1,11 +1,13 @@
+import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import dotenv from "dotenv";
 import Redis from "ioredis";
 import nodemailer from "nodemailer";
-import User from "../models/User.js";
 
 dotenv.config();
+
+const prisma = new PrismaClient();
 
 const redis = new Redis({
 	host: process.env.REDIS_HOST || "painel.whatlead.com.br",
@@ -27,7 +29,7 @@ export const forgotPasswordController = {
 
 		try {
 			// Verificar se o usuário existe
-			const user = await User.findOne({ email });
+			const user = await prisma.user.findUnique({ where: { email } });
 			if (!user) {
 				return res.status(404).json({
 					success: false,
@@ -120,7 +122,7 @@ export const forgotPasswordController = {
 			}
 
 			// Encontrar usuário
-			const user = await User.findOne({ email });
+			const user = await prisma.user.findUnique({ where: { email } });
 			if (!user) {
 				return res.status(404).json({
 					success: false,
@@ -132,8 +134,10 @@ export const forgotPasswordController = {
 			const hashedPassword = await bcrypt.hash(newPassword, 10);
 
 			// Atualizar senha
-			user.password = hashedPassword;
-			await user.save();
+			await prisma.user.update({
+				where: { email },
+				data: { password: hashedPassword },
+			});
 
 			// Remover código do Redis
 			await redis.del(`reset_code:${email}`);

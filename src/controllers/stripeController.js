@@ -1,4 +1,4 @@
-import { PrismaClient } from "@prisma/client"; // Importação correta
+import { PrismaClient } from "@prisma/client";
 import Redis from "ioredis";
 import { config } from "../config/index.js";
 import {
@@ -7,7 +7,7 @@ import {
 	handleProcessWebhookCheckout,
 	handleProcessWebhookUpdatedSubscription,
 	stripeInstance,
-} from "../stripe/index.js";
+} from "../lib/stripe.js";
 
 const prisma = new PrismaClient();
 
@@ -94,7 +94,7 @@ export const manageSubscription = async (req, res) => {
 
 		const session = await stripeInstance.billingPortal.sessions.create({
 			customer: user.stripeCustomerId,
-			return_url: "http://localhost:5173/dashboard",
+			return_url: process.env.FRONTEND_URL + "/dashboard",
 		});
 
 		res.status(200).json({

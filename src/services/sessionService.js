@@ -1,10 +1,8 @@
-// src/services/sessionService.js
+import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import User from "../models/User.js";
 
-// Use uma chave secreta diretamente no código para teste
-const JWT_SECRET = "jhDesEF5YmLz6SUcTHglPqaYISJSLzJwk057q1jRZI8";
+const prisma = new PrismaClient();
 
 /**
  * Autentica um usuário.
@@ -13,17 +11,22 @@ const JWT_SECRET = "jhDesEF5YmLz6SUcTHglPqaYISJSLzJwk057q1jRZI8";
  * @returns {Promise<Object>} - Usuário autenticado.
  */
 export const authenticateUser = async (email, password) => {
-	const user = await User.findOne({ email });
-	if (!user) {
-		throw new Error("Credenciais inválidas");
-	}
+	try {
+		const user = await prisma.user.findUnique({ where: { email } });
+		if (!user) {
+			throw new Error("Credenciais inválidas");
+		}
 
-	const isMatch = await bcrypt.compare(password, user.password);
-	if (!isMatch) {
-		throw new Error("Credenciais inválidas");
-	}
+		const isMatch = await bcrypt.compare(password, user.password);
+		if (!isMatch) {
+			throw new Error("Credenciais inválidas");
+		}
 
-	return user;
+		return user;
+	} catch (error) {
+		console.error("Erro ao autenticar usuário:", error);
+		throw error;
+	}
 };
 
 /**
@@ -33,9 +36,13 @@ export const authenticateUser = async (email, password) => {
  */
 export const generateToken = (user) => {
 	try {
-		return jwt.sign({ userId: user._id, plan: user.plan }, JWT_SECRET, {
-			expiresIn: "30d",
-		});
+		return jwt.sign(
+			{ userId: user.id, plan: user.plan },
+			process.env.JWT_SECRET,
+			{
+				expiresIn: "30d",
+			},
+		);
 	} catch (error) {
 		console.error("Erro ao gerar token:", error);
 		throw error;
