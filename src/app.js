@@ -1,4 +1,4 @@
-import { PrismaClient } from "@prisma/client"; // Importação do Prisma Client
+import { PrismaClient } from "@prisma/client";
 import cors from "cors";
 import dotenv from "dotenv";
 import express from "express";
@@ -20,6 +20,7 @@ import warmupRoutes from "./routes/warmupRoutes.js";
 dotenv.config();
 
 const app = express();
+app.set("trust proxy", 1);
 
 // Configurações de CORS
 const corsOptions = {
@@ -34,13 +35,16 @@ app.use(cors(corsOptions));
 const limiter = rateLimit({
 	windowMs: 15 * 60 * 1000,
 	max: 1000,
+	message: "Too many requests from this IP, please try again after 15 minutes",
 });
 app.use(limiter);
 
 // Middlewares
-app.use(morgan("combined"));
+app.use(cors(corsOptions));
 app.use(express.json({ limit: "800mb" }));
 app.use(express.urlencoded({ limit: "800mb", extended: true }));
+app.use(limiter);
+app.use(morgan("combined"));
 app.use(fileUpload());
 
 // Servir arquivos estáticos
