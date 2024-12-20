@@ -17,7 +17,7 @@ import { authMiddleware as protect } from "../middlewares/auth.js";
 const router = express.Router();
 
 // Rotas de usuário (sem autenticação)
-router.post("/register", register);
+router.post("/", register);
 router.post("/login", login);
 
 // Rotas de usuário (com autenticação)
